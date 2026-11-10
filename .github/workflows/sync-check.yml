@@ -1,0 +1,54 @@
+name: sync-check
+
+on:
+  push:
+  pull_request:
+
+defaults:
+  run:
+    working-directory: proposal-writing-discipline
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 重新生成适配文件
+        shell: pwsh
+        run: ./scripts/sync-adapters.ps1
+
+      - name: 确认适配文件与 SKILL.md 同源
+        shell: pwsh
+        run: |
+          git diff --ignore-cr-at-eol --exit-code
+          if ($LASTEXITCODE -ne 0) {
+            throw "adapters/ 与 SKILL.md 不一致，请运行 scripts/sync-adapters.ps1 后提交"
+          }
+
+      - name: 检查 frontmatter
+        shell: pwsh
+        run: |
+          $files = @(
+            'SKILL.md',
+            'adapters/claude-code/skills/proposal-writing-discipline/SKILL.md',
+            'adapters/opencode/skills/proposal-writing-discipline/SKILL.md'
+          )
+          foreach ($f in $files) {
+            $text = Get-Content -LiteralPath $f -Raw -Encoding UTF8
+            if ($text -notmatch '(?s)^---\r?\nname:\s*proposal-writing-discipline') {
+              throw "$f 的 frontmatter 缺少 name: proposal-writing-discipline"
+            }
+            if ($text -notmatch '(?s)^---.*?description:\s*\S+') {
+              throw "$f 的 frontmatter 缺少 description"
+            }
+          }
+          $cursor = Get-Content -LiteralPath 'adapters/cursor/.cursor/rules/proposal-writing-discipline.mdc' -Raw -Encoding UTF8
+          if ($cursor -notmatch '(?s)^---.*?alwaysApply:\s*false') {
+            throw 'Cursor 规则缺少 alwaysApply'
+          }
+          $windsurf = Get-Content -LiteralPath 'adapters/windsurf/.windsurf/rules/proposal-writing-discipline.md' -Raw -Encoding UTF8
+          if ($windsurf -notmatch '(?s)^---.*?trigger:\s*model_decision') {
+            throw 'Windsurf 规则缺少 trigger'
+          }
+          Write-Output 'frontmatter 检查通过'
